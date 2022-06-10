@@ -8,5 +8,8 @@
   },
   "keywords": [],
   "author": "Jotunn Development",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "mongoose": "^6.3.6"
+  }
 }
