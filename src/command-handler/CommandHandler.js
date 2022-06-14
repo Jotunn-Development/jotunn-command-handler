@@ -2,19 +2,23 @@ const path = require('path')
 
 const getAllFiles = require('../util/get-all-files')
 const Command = require('./Command')
+const SlashCommands = require('./SlashCommands')
 
 class CommandHandler {
   // <commandName, instance of the Command class>
   commands = new Map()
 
-  constructor(commandsDir, client) {
-    this.commandsDir = commandsDir
+  constructor(instance, commandsDir, client) {
+    this._instance = instance
+    this._commandsDir = commandsDir
+    this._slashCommands = new SlashCommands(client)
+
     this.readFiles()
     this.messageListener(client)
   }
 
   readFiles() {
-    const files = getAllFiles(this.commandsDir)
+    const files = getAllFiles(this._commandsDir)
     const validations = this.getValidations('syntax')
 
     for (let file of files) {
@@ -24,13 +28,32 @@ class CommandHandler {
       commandName = commandName.pop()
       commandName = commandName.split('.')[0]
 
-      const command = new Command(commandName, commandObject)
+      const command = new Command(this._instance, commandName, commandObject)
 
       for (const validation of validations) {
         validation(command)
       }
 
-      this.commands.set(command.commandName, command)
+      /**
+       * false || undefined  = legacy command
+       * true - slash command only
+       * 'both' = legacy and slash command
+       */
+      const { slash, testOnly } = commandObject
+
+      if (slash === true || slash === 'both') {
+        if (commandObject.testOnly === true) {
+          for (const guildId of this._instance.testServers) {
+            this._slashCommands.create(commandName, 'description', [], guildId)
+          }
+        } else {
+          this._slashCommands.create(commandName, 'description', [])
+        }
+      }
+
+      if (slash !== true) {
+        this.commands.set(command.commandName, command)
+      }
     }
   }
 
@@ -54,7 +77,12 @@ class CommandHandler {
         return
       }
 
-      const usage = { message, args, text: args.join(' ') }
+      const usage = {
+        message,
+        args,
+        text: args.join(' '),
+        guild: message.guild,
+      }
 
       for (const validation of validations) {
         if (!validation(command, usage, prefix)) {
